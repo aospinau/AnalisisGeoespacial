@@ -44,11 +44,10 @@ fichas['Evento'].groupby(fichas["fecha"].dt.year).count().plot(kind="bar", legen
 
 #%%
 #agrupar en unica clase inspecciones por movimientos en masa, estructural e incendio.
-fichas[fichas['Evento'].str.match('mov')]='movimientos en masa'
-fichas[fichas['Evento'].str.match('est')]='estructural'
-fichas[fichas['Evento'].str.match('inc')]='incendio'
 
-
+fichas['Evento'] = fichas['Evento'].replace(to_replace=r'^mov.*', value='movimientos en masa', regex=True)
+fichas['Evento'] = fichas['Evento'].replace(to_replace=r'^est.*', value='estructural', regex=True)
+fichas['Evento'] = fichas['Evento'].replace(to_replace=r'^inc.*', value='incendio', regex=True)
 # %%
 
 #Para Mapgis
@@ -66,14 +65,21 @@ fichas7=fichasMG.iloc[60000:70000]
 fichas8=fichasMG.iloc[70000:80000]
 fichas9=fichasMG.iloc[80000:90000]
 
-fichas1.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas1.csv', index=False)
-fichas2.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas2.csv', index=False)
-fichas3.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas3.csv', index=False)
-fichas4.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas4.csv', index=False)
-fichas5.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas5.csv', index=False)
-fichas6.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas6.csv', index=False)
-fichas7.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas7.csv', index=False)
-fichas8.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas8.csv', index=False)
-fichas9.to_csv(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas9.csv', index=False)
+fichas1.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas1.xlsx', index = None, header=True)
+fichas2.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas2.xlsx', index = None, header=True)
+fichas3.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas3.xlsx', index = None, header=True)
+fichas4.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas4.xlsx', index = None, header=True)
+fichas5.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas5.xlsx', index = None, header=True)
+fichas6.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas6.xlsx', index = None, header=True)
+fichas7.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas7.xlsx', index = None, header=True)
+fichas8.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas8.xlsx', index = None, header=True)
+fichas9.to_excel(r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas9.xlsx', index = None, header=True)
+
+# %%
+
+import pandas as pd
+
+read_file = pd.read_csv (r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas2.csv')
+read_file.to_excel (r'C:\Users\Dell\Documents\Unal\AnlisisGeoespacial\DatosFichas\fichas2.xlsx', index = None, header=True)
 
 # %%
