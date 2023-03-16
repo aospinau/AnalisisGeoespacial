@@ -5,4 +5,4 @@ En este repositorio se encuentra el proyecto de estudio del curso; el cual busca
 
 El proyecto incluye el análisis de datos de lluvia diaria y el registro de llamadas emergencias; sin embargo, estos datos no se han publicado. Se espera publicar fragmentos de datos en los próximos días.
 
-El código GDS.py incluye el proceso de limpieza de datos.
+El código GDS.py fue utilizado en la limpieza de datos para la geocodificación de las direcciones de las llamadas, en la plataforma MapGIS (https://www.medellin.gov.co/mapgis9/mapa.jsp?aplicacion=1&css=css/app_mapas_medellin.css) que usa información geográfica local oficial.
