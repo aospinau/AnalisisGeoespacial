@@ -13,11 +13,23 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from sklearn.cluster import DBSCAN
 from libpysal.weights import KNN
 from esda.moran import Moran_Local
+from matplotlib_scalebar.scalebar import ScaleBar
+
+from mgwr.gwr import GWR, MGWR
+from mgwr.sel_bw import Sel_BW
+from libpysal.weights import DistanceBand, KNN
+
+
+from sklearn.preprocessing import StandardScaler
+
+import libpysal
+from esda.moran import Moran_Local
+
 
 #%% tratamiento fichas
 #fichas=pd.read_csv(r'/home/aospinau/Documents/Unal/AnlisisGeoespacial/GitHubGDS/InspeccionesDAGRD.csv', encoding='ISO-8859-1')
 
-#%%
+
 # #Cambiar nombre de columna
 # fichas.rename(columns={ fichas.columns[1]: "fecha" }, inplace = True)
 # #definir columna de fecha como tipo datetime
@@ -275,7 +287,7 @@ from esda.moran import Moran_Local
 
 # %%
 #llamadas = gpd.read_file('FichasRiesgos2.geojson')
-#%%
+
 #gdf=llamadas
 #%% depuracion de datos desconfiables
 # gdf=llamadas
@@ -486,11 +498,13 @@ m
 
 
 # %%
-llamadas = gpd.read_file('/home/aospinau/Documents/Unal/AnlisisGeoespacial/GitHubGDS/fichasPrecicpitacionAcumulada2.geojson')
+llamadas = gpd.read_file('/home/aospinau/Documents/Unal/AnlisisGeoespacial/GitHubGDS/fichasPrecicpitacionAcumulada3.geojson')
 #%%
 gdf=llamadas
 #%%
-pluviometros =gpd.read_file('PluvioSIATA_EPM_Diario.geojson')
+gdf=gdf.to_crs(epsg='32619')
+#%%
+#pluviometros =gpd.read_file('PluvioSIATA_EPM_Diario.geojson')
 #%%
 barrios = gpd.read_file('/home/aospinau/Documents/Unal/AnlisisGeoespacial/GitHubGDS/planeacion_gdb.geojson')
 
@@ -499,11 +513,11 @@ barrios = gpd.read_file('/home/aospinau/Documents/Unal/AnlisisGeoespacial/GitHub
 quebradas = gpd.read_file('/home/aospinau/Documents/Unal/AnlisisGeoespacial/GitHubGDS/RedHidricaMedellin.geojson')
 
 #%% Elimina ubicaciones repetinas n veces
-gdf['geom_str'] = gdf.geometry.apply(lambda x: str(x))
-counts = gdf.groupby('geom_str').size().reset_index(name='count')
-n = 50
-unique_gdf = gdf.loc[gdf['geom_str'].isin(counts.loc[counts['count'] < n, 'geom_str'])]
-gdf = unique_gdf
+# gdf['geom_str'] = gdf.geometry.apply(lambda x: str(x))
+# counts = gdf.groupby('geom_str').size().reset_index(name='count')
+# n = 50
+# unique_gdf = gdf.loc[gdf['geom_str'].isin(counts.loc[counts['count'] < n, 'geom_str'])]
+# gdf = unique_gdf
 
 #Elimina fichas clasificadas como no ubicadas
 
@@ -654,6 +668,14 @@ ax2.legend(['Lluvia'])#bbox_to_anchor=(1.37, 0.7))
 
 plt.show()
 
+#%% Mapa de histogramas laterales
+joint_axes = sns.jointplot(x='Longitud', y='Latitud', data=gdf, s=0.5)
+# Add dark basemap
+cx.add_basemap(
+    joint_axes.ax_joint,
+    crs="EPSG:4326",
+    source=cx.providers.Stamen.TonerLite
+);
 # %% Mapa de pluviometros asociados
 #pluviometros usados
 pluvio=pluviometros.drop_duplicates(subset='codigo', keep='first')
@@ -742,6 +764,8 @@ eventos_por_barrio = eventos_barrios_gdf.groupby(['NOMBRE', 'TipoEvento']).size(
 # Fusiona el GeoDataFrame de barrios con los datos del número de eventos por tipo y barrio
 barrios_con_eventos = gdf_barrios.merge(eventos_por_barrio, on='NOMBRE', how='left')
 
+
+#%%
 # Crea el mapa centrado en Medellín
 mapa = folium.Map(location=[6.244203, -75.581211], zoom_start=12)
 
@@ -859,19 +883,19 @@ folium.LayerControl().add_to(mapa)
 # Guarda el mapa como un archivo HTML
 mapa.save('mapa_interactivo_con_control_de_capas.html')
 
-# %% Mapas de densidad de kernel
+# %% Amenaza alta
 
 gdf_alta=gdf[(gdf['Prioridad'] == 'alta') | (gdf['Prioridad'] == 'emergencia')]
-df_MM = gdf_alta[gdf_alta['Evento'] == 'movimientos en masa']
-df_Est = gdf_alta[gdf_alta['Evento'] == 'estructural']
-df_Inun = gdf_alta[gdf_alta['Evento'] == 'inundación']
+df_MM = gdf_alta[gdf_alta['TipoEvento'] == 'movimientos en masa']
+df_Est = gdf_alta[gdf_alta['TipoEvento'] == 'estructural']
+df_Inun = gdf_alta[gdf_alta['TipoEvento'] == 'inundación']
 
-
-
-df_MM2 = gdf[gdf['TipoEvento'] == 'movimientos en masa']
+#%% Mapas de densidad de kernel
+barrios= barrios #capa de poligonos que quieres agregar al mapa
+df_MM2 = gdf[gdf['TipoEvento'] == 'movimientos en masa'] #capa de puntos (geodataframe)
 
 # Create a figure and axes object
-fig, ax = plt.subplots(ncols=2, figsize=(20, 8))
+fig, ax = plt.subplots(ncols=1, figsize=(10, 8))
 
 levels = [0.1,0.3,0.5,0.7,0.9,1]
 
@@ -889,7 +913,7 @@ kde = sns.kdeplot(
 
 df_MM2.plot(ax=ax[0], color='black', markersize=1, alpha=0.03)
 barrios.plot(ax=ax[0], edgecolor='black', facecolor='none')
-cx.add_basemap(ax=ax[0],crs = df_MM.crs.to_string(), source=cx.providers.CartoDB.Positron)
+cx.add_basemap(ax=ax[0],crs = df_MM.crs.to_string(), source=cx.providers.CartoDB.Positron)  #mapa base de contextily
 ax[0].set_axis_off()
 
 ax[0].set_title('Densidad de Kernel para eventos de movimientos en masa')
@@ -1063,14 +1087,42 @@ plot_moran(mi);
 mi.I
 # %% indice Moran
 
+
+
+import geopandas as gpd
+import libpysal
+from esda.moran import Moran_Local
+from pysal.explore import esda
+
+from pysal.viz import splot
+from splot.esda import plot_moran
+
+#crea una columna  si es movimiento en masa y otra si es estructural
+gdf['EsMM'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'movimientos en masa' else 0, axis=1)
+gdf['EsEstructural'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'estructural' else 0, axis=1)
+
+gdf['DEF_N'] = gdf['DEF'].apply(lambda x: 0 if x == 0 else 1)
+
+
+df_MM2 = gdf[gdf['TipoEvento'] == 'movimientos en masa']
+df_Est2 = gdf[gdf['TipoEvento'] == 'estructural']
+
+
+gdf_alta=gdf[(gdf['Prioridad'] == 'alta') | (gdf['Prioridad'] == 'emergencia')]
+df_MM = gdf_alta[gdf_alta['TipoEvento'] == 'movimientos en masa']
+df_Est = gdf_alta[gdf_alta['TipoEvento'] == 'estructural']
+df_Inun = gdf_alta[gdf_alta['TipoEvento'] == 'inundación']
+
 # Cargar el GeoDataFrame desde tu archivo o fuente de datos
-gdf = gdf
+df = df_MM.to_crs(epsg='32619') # Puntos
 
 # Crear un objeto de pesos espaciales utilizando el método de vecinos más cercanos
-w = KNN.from_dataframe(gdf, k=5)  # Ajusta el valor de "k" según tus necesidades
+w = libpysal.weights.KNN.from_dataframe(df, k=5)  # Ajusta el valor de "k" según tus necesidades
+
+capa = 'Acum_3dias'
 
 # Extraer los valores de interés para el análisis (por ejemplo, una columna de datos numéricos)
-your_data = gdf['Acum_diario']
+your_data = df[capa]
 
 # Crear un objeto de análisis del Índice de Moran local
 moran_loc = Moran_Local(your_data, w)
@@ -1080,17 +1132,34 @@ local_moran_values = moran_loc.Is
 p_values = moran_loc.p_sim
 
 # Agregar los resultados al GeoDataFrame
-gdf['Local Moran Index'] = local_moran_values
-gdf['P-value'] = p_values
+df[f'Local Moran Index {capa}'] = local_moran_values
+df[f'P-value {capa}'] = p_values
+
 
 # Imprimir los resultados
-print(gdf[['Local Moran Index', 'P-value']])
+print(df[[f'Local Moran Index {capa}', f'P-value {capa}']])
 
-# Visualizar los resultados en un mapa
-gdf.plot(column='Local Moran Index', cmap='RdYlBu', legend=True, alpha=0.2)
+ax = df.plot(column=f'Local Moran Index {capa}', cmap='seismic', legend=True, alpha=0.4, vmin=-10, vmax=10)
 
+# Agregar un mapa base
+cx.add_basemap(ax,crs=df.crs.to_string(), source=cx.providers.CartoDB.Positron)
 
-gdf_moran=gdf[gdf['Local Moran Index'] > 1.5]
+# Agregar una barra de escala
+scale_bar = AnchoredSizeBar(ax.transData, 10000, '10 km', loc='lower right')
+ax.add_artist(scale_bar)
+
+# Muestra el gráfico
+plt.show()
+
+w = libpysal.weights.KNN.from_dataframe(df, k=10)
+
+mi = esda.Moran(df[capa], w)
+plot_moran(mi)
+
+gdf_moran = df[df[f'Local Moran Index {capa}'] > 1.5]
+
+print(f'{capa}')
+
 
 
 # %% Caracterizar por prioridad y evento
@@ -1110,8 +1179,8 @@ gdf_Alto=gdf_Alto.to_crs(epsg='32619')
 coords = gdf_Alto['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist()
 
 # Define the parameters for DBSCAN
-eps = 200  # Neighborhood radius
-min_samples = 5  # Minimum number of points to form a cluster
+eps = 500  # Neighborhood radius
+min_samples = 10  # Minimum number of points to form a cluster
 
 # Apply DBSCAN
 dbscan = DBSCAN(eps=eps, min_samples=min_samples)
@@ -1123,7 +1192,7 @@ barrios2=barrios.to_crs(epsg='32619')
 # Assuming you have a GeoDataFrame called 'gdf_Alto' with a 'cluster' column
 
 # Create the plot
-fig, ax = plt.subplots(figsize=(12, 10))
+fig, ax = plt.subplots(figsize=(10, 6))
 
 barrios2.plot(ax=ax, edgecolor='black', facecolor='none', alpha=0.3)
 # Plot the clusters
@@ -1151,6 +1220,7 @@ plt.tight_layout()
 
 plt.show()
 
+#%%
 
 # Cargar el GeoDataFrame de tus puntos
 gdf_cluster=gdf_Alto[gdf_Alto['cluster']==10]
@@ -1191,8 +1261,8 @@ gdf_Alto=gdf_Alto.to_crs(epsg='32619')
 coords = gdf_Alto['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist()
 
 # Define the parameters for DBSCAN
-eps = 200  # Neighborhood radius
-min_samples = 5  # Minimum number of points to form a cluster
+eps = 500  # Neighborhood radius
+min_samples = 10  # Minimum number of points to form a cluster
 
 # Apply DBSCAN
 dbscan = DBSCAN(eps=eps, min_samples=min_samples)
@@ -1203,11 +1273,11 @@ gdf_Alto['cluster'] = clusters
 
 
 barrios2=barrios.to_crs(epsg='32619')
-quebradas2=quebradas.to_crs(epsg='32619')
+#quebradas2=quebradas.to_crs(epsg='32619')
 # Assuming you have a GeoDataFrame called 'gdf_Alto' with a 'cluster' column
 
 # Create the plot
-fig, ax = plt.subplots(figsize=(13, 8))
+fig, ax = plt.subplots(figsize=(10,6))
 
 barrios2.plot(ax=ax, edgecolor='black', facecolor='none', alpha=0.3)
 # Plot the clusters
@@ -1235,12 +1305,12 @@ plt.tight_layout()
 
 plt.show()
 
-
+#%%
 # Cargar el GeoDataFrame de tus puntos
 gdf_cluster=gdf_Alto[gdf_Alto['cluster']==16]
 
 # Crear la figura y los ejes
-fig, ax = plt.subplots(figsize=(10, 10))
+fig, ax = plt.subplots(figsize=(7, 7))
 
 # Plotear los puntos
 quebradas2.plot(ax=ax, edgecolor='blue', facecolor='none', alpha=1, linewidth=2, label='Quebradas')
@@ -1454,59 +1524,701 @@ plt.show()
 fig.savefig('/home/aospinau/Documents/Unal/AnlisisGeoespacial/FigurasProyecto/Boxplot_90dias.png', dpi=300, bbox_inches='tight')
 
 
+#%% Boxplot por cluster
+grouped = gdf_Alto.groupby('cluster')
+
+# Crear una lista vacía para almacenar los datos de lluvia por cluster
+rain_data = []
+
+# Iterar sobre cada grupo y extraer los valores de lluvia
+for _, group in grouped:
+    rain_values = group['Acum_15dias'].values
+    rain_data.append(rain_values)
+
+# Crear la figura y los ejes del boxplot
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Crear el boxplot con los datos de lluvia por cluster
+ax.boxplot(rain_data)
+
+# Configurar las etiquetas del eje x con los nombres de los clusters
+cluster_labels = grouped.groups.keys()
+ax.set_xticklabels(cluster_labels)
+
+# Agregar etiquetas y título al gráfico
+ax.set_xlabel('Cluster')
+ax.set_ylabel('Lluvia')
+ax.set_title('Boxplot de lluvia por cluster')
+
+# Mostrar el gráfico
+plt.show()
+
+grouped = gdf_Alto.groupby('cluster')
+
+# Crear una lista vacía para almacenar los datos de lluvia por cluster
+rain_data = []
+
+# Iterar sobre cada grupo y extraer los valores de lluvia
+for _, group in grouped:
+    rain_values = group['Acum_15dias'].values
+    rain_data.append(rain_values)
+
+# Crear la figura y los ejes del boxplot
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Crear el boxplot con los datos de lluvia por cluster
+ax.boxplot(rain_data)
+
+# Configurar las etiquetas del eje x con los nombres de los clusters
+cluster_labels = grouped.groups.keys()
+ax.set_xticklabels(cluster_labels)
+
+# Agregar etiquetas y título al gráfico
+ax.set_xlabel('Cluster')
+ax.set_ylabel('Lluvia')
+ax.set_title('Boxplot de lluvia por cluster')
+
+# Mostrar el gráfico
+plt.show()
+
+# %% Curva de densidad
+
+# Supongamos que tienes un DataFrame llamado 'gdf_Alto' con las columnas 'Acum_diario' y 'cluster'
+
+# Filtrar los datos para los primeros 5 clusters
+df_filtered = gdf_Alto[gdf_Alto['cluster'].isin(gdf_Alto['cluster'].unique()[:5])]
+
+# Crear gráficos de densidad separados para cada cluster
+sns.set(style="whitegrid")  # Establecer estilo de la gráfica
+
+# Definir una paleta de colores para los clusters
+palette = sns.color_palette("Set1", len(df_filtered['cluster'].unique()))
+
+# Crear un subplot por cada cluster
+fig, axes = plt.subplots(len(df_filtered['cluster'].unique()), 1, figsize=(8, 6), sharex=True)
+
+# Iterar sobre los clusters y crear el gráfico de densidad correspondiente
+for i, cluster in enumerate(df_filtered['cluster'].unique()):
+    subset = df_filtered[df_filtered['cluster'] == cluster]
+    ax = axes[i]
+
+    sns.kdeplot(data=subset, x='Acum_diario', fill=True, color=palette[i], ax=ax)
+    ax.set_title(f'Cluster {cluster}')
+    ax.set_ylabel('Densidad')
+
+    # Establecer el límite del eje x en 0
+    ax.set_xlim(0)
+
+# Configurar el título y el eje x compartidos
+fig.suptitle('Curvas de Densidad para los Primeros 5 Clusters', fontsize=12)
+axes[-1].set_xlabel('Acumulado diario')
+
+plt.tight_layout()
+plt.show()
+
+
+# %%
+
+gdf_MM= gdf[gdf['Evento'] == 'movimientos en masa']
+# %% boxplot + histograma anual
+
+# Crear el DataFrame eventos_por_año
+eventos_por_año = gdf_MM.groupby(['año', 'TipoEvento']).size().reset_index(name='count')
+
+# Crear la figura y los ejes
+fig, ax = plt.subplots(figsize=(10, 8))
+
+# Graficar el histograma de eventos por año
+eventos_por_año.pivot(index='año', columns='TipoEvento', values='count').plot(kind='bar', stacked=True, ax=ax)
+
+# Configurar etiquetas y títulos
+ax.set_xlabel('Año')
+ax.set_ylabel('Número de Eventos')
+ax.set_title('Histograma de Eventos por Año y Lluvia Media en Medellín')
+
+# Ajustar las leyendas
+ax.legend(title='Tipo de Evento', bbox_to_anchor=(1.35, 1.05))
+
+# Crear los ejes para el boxplot
+ax2 = ax.twinx().twiny()
+
+# Agrupar los datos y graficar el boxplot
+grouped = gdf_MM.groupby('año')
+rain_data = []
+
+for _, group in grouped:
+    rain_values = group['Acum_7dias'].values
+    rain_data.append(rain_values)
+
+ax2.boxplot(rain_data)
+
+# Configurar las etiquetas del eje x con los nombres de los clusters
+cluster_labels = grouped.groups.keys()
+ax2.set_xticklabels(cluster_labels)
+
+# Configurar las etiquetas y el título del boxplot
+ax2.set_xlabel('Año')
+ax2.set_ylabel('Lluvia')
+ax2.set_title('Boxplot de lluvia de 7 días antecedentes por cluster')
+
+# Ajustar los márgenes para mostrar los boxplot correctamente
+ax2.margins(x=0.5)
+
+# Mostrar el gráfico completo
+plt.show()
+
+
+# %% calcular distancia a drenaje más cercano
+
+# Cargar el GeoDataFrame de puntos (gdf) y el GeoDataFrame de líneas (quebradas)
+gdf_puntos = gdf.to_crs(epsg='32619')
+gdf_quebradas = quebradas.to_crs(epsg='32619')
+
+# Calcular la distancia al punto más cercano de cada punto a las líneas
+distancias = gdf_puntos.distance(gdf_quebradas.unary_union)
+
+# Agregar la columna de distancia al GeoDataFrame de puntos
+gdf_puntos['distancia_quebrada'] = distancias
+
+gdf=gdf_puntos
+
+#%% agregar estraro socioeconómico
+
+gdf_estrato = gpd.read_file('/home/aospinau/Documents/Unal/AnlisisGeoespacial/estrato_socioeconomico.geojson')
+
+# Crear el gráfico sin bordes
+fig, ax = plt.subplots(figsize=(10, 10))
+gdf_estrato.plot(column='ESTRATO', cmap='viridis', edgecolor='none', legend=True, ax=ax)
+
+# Agregar el mapa base con contextily
+cx.add_basemap(ax, crs=gdf_estrato.crs.to_string(), source=cx.providers.Stamen.TonerLite)
+
+# Mostrar el gráfico
+plt.show()
+
 #%%
-grouped = gdf_Alto.groupby('cluster')
 
-# Crear una lista vacía para almacenar los datos de lluvia por cluster
-rain_data = []
+gdf= gdf.to_crs(epsg='4326')
 
-# Iterar sobre cada grupo y extraer los valores de lluvia
-for _, group in grouped:
-    rain_values = group['Acum_15dias'].values
-    rain_data.append(rain_values)
+# Conservar solo la columna 'ESTRATO'
+gdf_unido = gdf_estrato[['ESTRATO', 'geometry']].to_crs(epsg='4326')
 
-# Crear la figura y los ejes del boxplot
-fig, ax = plt.subplots(figsize=(10, 6))
 
-# Crear el boxplot con los datos de lluvia por cluster
-ax.boxplot(rain_data)
+gdf= gpd.sjoin(gdf, gdf_unido, how='left')
 
-# Configurar las etiquetas del eje x con los nombres de los clusters
-cluster_labels = grouped.groups.keys()
-ax.set_xticklabels(cluster_labels)
+gdf=gdf.drop_duplicates(subset='FICHA')
 
-# Agregar etiquetas y título al gráfico
-ax.set_xlabel('Cluster')
-ax.set_ylabel('Lluvia')
-ax.set_title('Boxplot de lluvia por cluster')
 
-# Mostrar el gráfico
+
+gdf = gdf.drop(columns=['index_right'])
+# %%
+
+
+
+# %% Regresión logistica
+
+from pysal.model import spreg
+from pysal.lib import weights
+from pysal.explore import esda
+from scipy import stats
+import statsmodels.formula.api as sm
+import numpy
+import pandas as pd
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import seaborn
+
+
+#%%
+variable_names = ['hand', 'elevacion', 'pendiente',
+                  'Acum_diario', 'Acum_3dias', 
+                  'Acum_15dias', 'Acum_30dias', 'Acum_90dias', 
+                  'distancia_quebrada']
+
+for columna in variable_names:
+    gdf[columna] = gdf[columna].astype(float)
+for columna in variable_names:
+    gdf[columna] = gdf[columna].dropna()
+
+#%%
+
+gdf_MM= gdf[gdf['Evento'] == 'movimientos en masa']
+
+m1 = spreg.OLS(gdf_MM[['Acum_7dias']].values, gdf_MM[variable_names].values, name_y='Acum_7dias', name_x=variable_names)
+
+# %%
+
+print(m1.summary)
+
+# %% knn
+
+knn = weights.KNN.from_dataframe(gdf_MM, k=5)
+# %%
+lag_residual = weights.spatial_lag.lag_spatial(knn, m1.u)
+
+ax = seaborn.regplot(x=m1.u.flatten(), y=lag_residual.flatten(), 
+                     line_kws=dict(color='orangered'),
+                     ci=None)
+ax.set_xlabel('Model Residuals - $u$')
+ax.set_ylabel('Spatial Lag of Model Residuals - $W u$')
+
+
+
+# %%
+
+correlation_matrix = gdf.corr(method='pearson')
+
+print(correlation_matrix)
+# %%
+# Crear un mapa de calor de la matriz de correlación
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
+
+# Mostrar la gráfica
 plt.show()
 
-grouped = gdf_Alto.groupby('cluster')
 
-# Crear una lista vacía para almacenar los datos de lluvia por cluster
-rain_data = []
+# %% análisis de cluster
 
-# Iterar sobre cada grupo y extraer los valores de lluvia
-for _, group in grouped:
-    rain_values = group['Acum_15dias'].values
-    rain_data.append(rain_values)
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
 
-# Crear la figura y los ejes del boxplot
-fig, ax = plt.subplots(figsize=(10, 6))
+gdf['EsMM'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'movimientos en masa' else 0, axis=1)
+gdf['EsEstructural'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'estructural' else 0, axis=1)
 
-# Crear el boxplot con los datos de lluvia por cluster
-ax.boxplot(rain_data)
+df_MM2 = gdf[gdf['TipoEvento'] == 'movimientos en masa']
+df_Est2 = gdf[gdf['TipoEvento'] == 'estructural']
 
-# Configurar las etiquetas del eje x con los nombres de los clusters
-cluster_labels = grouped.groups.keys()
-ax.set_xticklabels(cluster_labels)
 
-# Agregar etiquetas y título al gráfico
-ax.set_xlabel('Cluster')
-ax.set_ylabel('Lluvia')
-ax.set_title('Boxplot de lluvia por cluster')
+gdf_alta=gdf[(gdf['Prioridad'] == 'alta') | (gdf['Prioridad'] == 'emergencia')]
+df_MM = gdf_alta[gdf_alta['TipoEvento'] == 'movimientos en masa']
+df_Est = gdf_alta[gdf_alta['TipoEvento'] == 'estructural']
+df_Inun = gdf_alta[gdf_alta['TipoEvento'] == 'inundación']
 
-# Mostrar el gráfico
+gdf_MM= df_Est2#gdf[gdf['Evento'] == 'movimientos en masa']
+
+variable_names = ['FICHA', 'hand', 'elevacion', 'pendiente', 
+                  'distancia_quebrada', 'ESTRATO']
+
+for columna in variable_names:
+    gdf_MM[columna] = pd.to_numeric(gdf_MM[columna], errors='coerce')
+    gdf_MM = gdf_MM.dropna(subset=[columna])
+
+casa=gdf_MM[variable_names]
+casa['elevacion'] = casa['elevacion'].astype(float)
+#casa['FICHA'] = casa['FICHA'].astype(float)
+casa['pendiente'] = casa['pendiente'].astype(float)
+
+casa['FICHA'] = pd.to_numeric(casa['FICHA'], errors='coerce')
+
+# Elimina las filas donde 'FICHA' es NaN
+casa = casa.dropna(subset=['FICHA'])
+
+# Opcionalmente, puedes convertir los valores en la columna 'FICHA' a float
+casa['FICHA'] = casa['FICHA'].astype(float)
+
+
+scaler = StandardScaler()
+scaled_features = scaler.fit_transform(casa)
+
+
+
+inertia = []
+for i in range(1, 11):
+    kmeans = KMeans(n_clusters=i, random_state=0).fit(scaled_features)
+    inertia.append(kmeans.inertia_)
+
+plt.plot(range(1, 11), inertia)
+plt.xlabel('Number of clusters')
+plt.ylabel('Inertia')
+plt.title('Elbow Method For Optimal Number of Clusters')
 plt.show()
+
+
+n_clusters = 5 # reemplaza esto con el número de clusters que hayas elegido
+kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(scaled_features)
+
+
+casa['Cluster_Kmeans'] = kmeans.labels_
+
+
+grouped = casa.groupby('Cluster_Kmeans').mean()
+print(grouped)
+
+
+
+casa=casa[['Cluster_Kmeans', 'FICHA']]
+
+
+
+gdf['FICHA'] = pd.to_numeric(gdf['FICHA'], errors='coerce')
+
+# Elimina las filas donde 'FICHA' es NaN
+gdf = gdf.dropna(subset=['FICHA'])
+
+gdf['FICHA'] = gdf['FICHA'].astype(float)
+
+casa_gdf = gdf.merge(casa, on='FICHA')
+
+
+# Asegurándose de que 'dataframe' es un GeoDataFrame con la columna 'Cluster'.
+# Si es un DataFrame normal, necesitas convertirlo a un GeoDataFrame.
+
+# Si 'dataframe' es un DataFrame, conviértelo a un GeoDataFrame
+# Suponiendo que las columnas de latitud y longitud se llamen 'lat' y 'lon'.
+# Ahora grafica el GeoDataFrame
+fig, ax = plt.subplots(figsize=(10, 10))
+
+barrios= barrios.to_crs(epsg='32619')
+
+
+# Colorea los puntos según su asignación de cluster
+casa_gdf.plot(column='Cluster_Kmeans', categorical=True, legend=True, markersize=10, cmap='Set1', ax=ax)
+
+cx.add_basemap(ax=ax,crs = casa_gdf.crs.to_string(), source=cx.providers.CartoDB.Positron)  #mapa base de contextily
+
+barrios.plot(ax=ax, edgecolor='black', facecolor='none', alpha=0.3)
+
+
+scale_bar = AnchoredSizeBar(ax.transData, 10000, '10 km', loc='lower right')
+ax.add_artist(scale_bar)
+
+# Agrega títulos y etiquetas
+plt.title('Visualización Espacial de Clusters')
+plt.xlabel('Longitud')
+plt.ylabel('Latitud')
+
+# Muestra el mapa
+plt.show()
+
+
+# %%
+
+casa=casa_gdf.to_crs(epsg='32619')
+#%%
+import geopandas as gpd
+import libpysal as lps
+import esda
+
+# Asegurarse de que el GeoDataFrame esté en un sistema de coordenadas proyectadas
+# Cambia 'EPSG:xxxx' por el EPSG adecuado para tu área de estudio
+# gdf = gdf.to_crs('EPSG:xxxx')
+
+# Corregir geometrías inválidas
+casa['geometry'] = gdf.buffer(0)
+
+# Reindexar el GeoDataFrame
+casa = casa.reset_index(drop=True)
+
+# Crear una matriz de pesos espaciales
+w = lps.weights.Queen.from_dataframe(casa)
+
+# Calcular el índice de Moran
+moran = esda.Moran(casa['Cluster'], w)
+
+# Imprimir el índice de Moran y su p-valor
+print(f"Índice de Moran: {moran.I}, p-valor: {moran.p_sim}")
+
+
+#%% Geographycally Weighted Regresion (GWR)
+
+gdf['EsMM'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'movimientos en masa' else 0, axis=1)
+gdf['EsEstructural'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'estructural' else 0, axis=1)
+
+df_MM2 = gdf[gdf['TipoEvento'] == 'movimientos en masa']
+df_Est2 = gdf[gdf['TipoEvento'] == 'estructural']
+
+
+gdf_alta=gdf[(gdf['Prioridad'] == 'alta') | (gdf['Prioridad'] == 'emergencia')]
+df_MM = gdf_alta[gdf_alta['TipoEvento'] == 'movimientos en masa']
+df_Est = gdf_alta[gdf_alta['TipoEvento'] == 'estructural']
+df_Inun = gdf_alta[gdf_alta['TipoEvento'] == 'inundación']
+
+
+# Tu DataFrame
+df = df_Est
+
+variable_names = ['elevacion', 'pendiente', 'distancia_quebrada', 'ESTRATO', 'Acum_15dias']
+
+for columna in variable_names:
+    df[columna] = pd.to_numeric(df[columna], errors='coerce')
+    df = df.dropna(subset=[columna])
+
+# Extraer las coordenadas de los puntos
+coords = np.array([(geom.x, geom.y) for geom in df.geometry])
+
+df['DEF_N'] = df['DEF'].apply(lambda x: 0 if x == 0 else 1)
+
+# Definir la variable dependiente y las variables independientes
+y = df['DEF_N'].values.reshape(-1, 1)
+X = df[variable_names].values
+
+# Estandarizar las variables independientes
+scaler = StandardScaler()
+X_standardized = scaler.fit_transform(X)
+
+# Seleccionar el ancho de banda para GWR
+selector = Sel_BW(coords, y, X_standardized, multi=False)
+bw = selector.search()
+
+# Ajustar el modelo GWR
+gwr_model = GWR(coords, y, X_standardized, bw)
+gwr_results = gwr_model.fit()
+
+# Coeficientes locales de regresión
+local_params = gwr_results.params
+
+# Agregar resultados al GeoDataFrame
+df['local_intercept'] = local_params[:, 0]
+df['local_coef_variable1'] = local_params[:, 1]
+df['local_coef_variable2'] = local_params[:, 2]
+
+# Agregar todos los parámetros
+for i in range(local_params.shape[1]):
+    df[f'param_{i}'] = local_params[:, i]
+
+# Crear una figura con varios subplots
+fig, axs = plt.subplots(2, 3, figsize=(20, 10))
+
+# Loop sobre los coeficientes y graficarlos
+for i in range(local_params.shape[1]):
+    ax = axs[i // 3, i % 3]
+    df.plot(column=f'param_{i}', ax=ax, legend=True)
+    ax.set_title(f'Coeficiente Local {i}')
+    ax.axis('off')
+
+# Mostrar la figura
+plt.show()
+
+# Mostrar un resumen de los resultados
+gwr_results.summary()
+
+#%%GWR lluvia
+
+gdf['EsMM'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'movimientos en masa' else 0, axis=1)
+gdf['EsEstructural'] = gdf.apply(lambda row: 1 if row['TipoEvento'] == 'estructural' else 0, axis=1)
+
+df_MM2 = gdf[gdf['TipoEvento'] == 'movimientos en masa']
+df_Est2 = gdf[gdf['TipoEvento'] == 'estructural']
+
+
+gdf_alta=gdf[(gdf['Prioridad'] == 'alta') | (gdf['Prioridad'] == 'emergencia')]
+df_MM = gdf_alta[gdf_alta['TipoEvento'] == 'movimientos en masa']
+df_Est = gdf_alta[gdf_alta['TipoEvento'] == 'estructural']
+df_Inun = gdf_alta[gdf_alta['TipoEvento'] == 'inundación']
+
+
+# Tu DataFrame
+df = gdf_alta
+
+variable_names = ['hand', 'elevacion', 'pendiente', 
+                  'distancia_quebrada', 'ESTRATO']
+
+for columna in variable_names:
+    df[columna] = pd.to_numeric(df[columna], errors='coerce')
+    df = df.dropna(subset=[columna])
+
+# Extraer las coordenadas de los puntos
+coords = np.array([(geom.x, geom.y) for geom in df.geometry])
+
+df['DEF_N'] = df['DEF'].apply(lambda x: 0 if x == 0 else 1)
+
+# Definir la variable dependiente y las variables independientes
+y = df['DEF_N'].values.reshape(-1, 1)
+X = df[variable_names].values
+
+# Estandarizar las variables independientes
+scaler = StandardScaler()
+X_standardized = scaler.fit_transform(X)
+
+# Seleccionar el ancho de banda para GWR
+selector = Sel_BW(coords, y, X_standardized, multi=False)
+bw = selector.search()
+
+# Ajustar el modelo GWR
+gwr_model = GWR(coords, y, X_standardized, bw)
+gwr_results = gwr_model.fit()
+
+# Coeficientes locales de regresión
+local_params = gwr_results.params
+
+# Agregar resultados al GeoDataFrame
+df['local_intercept'] = local_params[:, 0]
+df['local_coef_variable1'] = local_params[:, 1]
+df['local_coef_variable2'] = local_params[:, 2]
+
+# Agregar todos los parámetros
+for i in range(local_params.shape[1]):
+    df[f'param_{i}'] = local_params[:, i]
+
+# Crear una figura con varios subplots
+fig, axs = plt.subplots(2, 3, figsize=(20, 10))
+
+# Loop sobre los coeficientes y graficarlos
+for i in range(local_params.shape[1]):
+    ax = axs[i // 3, i % 3]
+    df.plot(column=f'param_{i}', ax=ax, legend=True)
+    ax.set_title(f'Coeficiente Local {i}')
+    ax.axis('off')
+
+# Mostrar la figura
+plt.show()
+
+# Mostrar un resumen de los resultados
+gwr_results.summary()
+
+# %%
+
+import matplotlib.pyplot as plt
+import geopandas as gpd
+
+# Extraer coeficientes locales y valores predichos
+local_params = gwr_model.params
+predictions = gwr_model.predy
+
+# Agregar coeficientes y predicciones al GeoDataFrame original
+# Asumiendo que 'gdf' es tu GeoDataFrame original
+df['local_intercept'] = local_params[:, 0]
+df['local_slope'] = local_params[:, 1]
+df['predictions'] = predictions
+
+# Crear un gráfico para visualizar los coeficientes locales y las predicciones
+fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+
+# Visualizar el coeficiente de intersección local
+df.plot(column='local_intercept', cmap='coolwarm', legend=True, ax=axes[0])
+axes[0].set_title('Local Intercept')
+
+# Visualizar el coeficiente de inclinación local
+df.plot(column='local_slope', cmap='coolwarm', legend=True, ax=axes[1])
+axes[1].set_title('Local Slope')
+
+
+
+# %% Variograma
+
+
+import skgstat as skg
+from skgstat import Variogram, OrdinaryKriging
+import pandas as pd
+
+V = Variogram(df_MM[['X', 'Y']].values, df_MM.Acum_7dias.values, estimator="entropy", model="spherical", maxlag=1000, n_lags=20)
+V.plot()
+
+#%%ANN
+
+import geopandas as gpd
+import numpy as np
+from scipy.spatial import KDTree
+
+# Asumiendo que 'gdf' es tu GeoDataFrame con los puntos
+
+# Convertir las geometrías a una matriz numpy de coordenadas (n, 2)
+coords = np.array([(geom.x, geom.y) for geom in gdf.geometry])
+
+# Usar KDTree para encontrar rápidamente los vecinos más cercanos
+kdtree = KDTree(coords)
+
+# Calcular las distancias al vecino más cercano para cada punto
+# (k=2) para encontrar el primer vecino que no sea el punto en sí
+distances, _ = kdtree.query(coords, k=2)
+nearest_neighbor_distances = distances[:, 1]
+
+# Calcular la media de las distancias observadas
+observed_mean_distance = np.mean(nearest_neighbor_distances)
+
+# Calcular la media de las distancias esperadas bajo CSR (Complete Spatial Randomness)
+n = len(coords)
+area = 1  # Asume un área de estudio de 1 (cambiar según sea necesario)
+expected_mean_distance = 0.5 / np.sqrt(n / area)
+
+# Calcular el ratio de Nearest Neighbor
+nn_ratio = observed_mean_distance / expected_mean_distance
+
+# Mostrar resultados
+print(f"Distancia promedio al vecino más cercano: {observed_mean_distance}")
+print(f"Valor esperado bajo CSR (Complete Spatial Randomness): {expected_mean_distance}")
+print(f"Ratio de Nearest Neighbor: {nn_ratio}")
+
+# Interpretar el resultado
+if nn_ratio < 1:
+    print("Los puntos están agrupados.")
+elif nn_ratio > 1:
+    print("Los puntos están dispersos.")
+else:
+    print("Los puntos tienen una distribución aleatoria.")
+
+# %% mapas de densidad de kernel
+
+barrios= barrios.to_crs(epsg='32619') #capa de poligonos que quieres agregar al mapa
+df_MM2 = gdf[gdf['TipoEvento'] == 'movimientos en masa'] #capa de puntos (geodataframe)
+
+
+fig, ax = plt.subplots(ncols=1, figsize=(12, 8))
+
+levels = [0.1,0.3,0.5,0.7,0.9,1]
+
+# Plot df_MM2 on the second axes object
+kde = sns.kdeplot(
+    ax=ax,
+    x=df_MM2['geometry'].x,
+    y= df_MM2['geometry'].y,
+    levels = levels,
+    shade=True,
+    cmap='Reds',
+    alpha=0.8,
+    cbar=True
+)
+
+df_MM2.plot(ax=ax, color='black', markersize=1, alpha=0.03)
+barrios.plot(ax=ax, edgecolor='black', facecolor='none')
+cx.add_basemap(ax=ax,crs = df_MM.crs.to_string(), source=cx.providers.CartoDB.Positron)  #mapa base de contextily
+#ax.set_axis_off()
+
+from matplotlib_scalebar.scalebar import ScaleBar
+
+# Crear una barra de escala y añadirla a la gráfica
+scalebar = ScaleBar(1, location='lower right') # 1 pixel = 1 meter, in lower right corner
+ax.add_artist(scalebar)
+
+# Mostrar la gráfica
+
+
+
+ax.set_title('Densidad de Kernel para eventos de movimientos en masa')
+
+plt.show()
+
+
+df_Est2 = gdf[gdf['TipoEvento'] == 'estructural']
+
+fig, ax = plt.subplots(ncols=1, figsize=(12, 8))
+
+
+
+# Plot df_MM2 on the second axes object
+kde = sns.kdeplot(
+    ax=ax,
+    x=df_Est2['geometry'].x,
+    y= df_Est2['geometry'].y,
+    levels = levels,
+    shade=True,
+    cmap='Greens',
+    alpha=0.8,
+    cbar=True
+)
+ax.set_title('Densidad de Kernel para eventos estructurales')
+# Add a basemap
+df_Est2.plot(ax=ax, color='black', markersize=1, alpha=0.03)
+
+barrios.plot(ax=ax, edgecolor='black', facecolor='none', alpha=0.5)
+cx.add_basemap(ax=ax,crs = df_MM.crs.to_string(), source=cx.providers.CartoDB.Positron)
+#ax.set_axis_off()
+
+scalebar = ScaleBar(1, location='lower right') # 1 pixel = 1 meter, in lower right corner
+ax.add_artist(scalebar)
+
+
+# %%
